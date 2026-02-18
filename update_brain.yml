@@ -13,11 +13,12 @@ jobs:
       - name: Write new brain.json
         run: |
           echo "${{ github.event.client_payload.brain }}" > brain.json
-
       - name: Commit update
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           git config --global user.name "JacksonWeb"
           git config --global user.email "jackson@hivemind.ai"
           git add brain.json
           git commit -m "Web update" || echo "No changes"
-          git push
+          git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git
