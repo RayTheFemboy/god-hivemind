@@ -1,0 +1,23 @@
+name: Update Brain From Web
+
+on:
+  repository_dispatch:
+    types: [update-brain]
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Write new brain.json
+        run: |
+          echo "${{ github.event.client_payload.brain }}" > brain.json
+
+      - name: Commit update
+        run: |
+          git config --global user.name "JacksonWeb"
+          git config --global user.email "jackson@hivemind.ai"
+          git add brain.json
+          git commit -m "Web update" || echo "No changes"
+          git push
