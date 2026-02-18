@@ -1,0 +1,30 @@
+name: Merge Jackson Brain
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Install Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Run merge script
+        run: python merge_brain.py
+
+      - name: Commit merged brain
+        run: |
+          git config --global user.name "JacksonHiveMind"
+          git config --global user.email "jackson@hivemind.ai"
+          git add brain.json
+          git commit -m "Merged brain" || echo "No changes"
+          git push origin main
