@@ -1,5 +1,4 @@
-// CONFIG — replace with your GitHub username + repo
-const USER = "RayTheFemboy";
+const USER = "raythefemboy";
 const REPO = "god-hivemind";
 const BRANCH = "main";
 
@@ -20,7 +19,7 @@ async function loadBrain() {
 
 loadBrain();
 
-// Basic Jackson logic (simple version)
+// Basic Jackson logic
 function learn(text) {
     const words = text.toLowerCase().split(" ");
 
@@ -36,12 +35,29 @@ function learn(text) {
 }
 
 function generateReply() {
-    // Very simple reply generator for now
     const keys = Object.keys(brain.words);
     if (keys.length === 0) return "I am still learning.";
 
     const top = keys.sort((a, b) => brain.words[b].seen - brain.words[a].seen)[0];
     return "I am thinking about " + top + ".";
+}
+
+// Send updated brain to GitHub Action
+async function saveBrain() {
+    await fetch(`https://api.github.com/repos/${USER}/${REPO}/dispatches`, {
+        method: "POST",
+        headers: {
+            "Accept": "application/vnd.github+json"
+        },
+        body: JSON.stringify({
+            event_type: "update-brain",
+            client_payload: {
+                brain: JSON.stringify(brain)
+            }
+        })
+    });
+
+    console.log("Brain update sent to GitHub Action.");
 }
 
 // Chat UI
@@ -55,6 +71,8 @@ function sendMessage() {
     learn(text);
     const reply = generateReply();
     addMessage("Jackson: " + reply, "bot");
+
+    saveBrain(); // Save after every message
 
     input.value = "";
 }
