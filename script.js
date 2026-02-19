@@ -4,14 +4,13 @@ let brain = {
     history: []
 };
 
-// 1. THE SEND FUNCTION - This must be at the top level
+// 1. THE SEND FUNCTION
 async function sendMessage() {
     const inputField = document.getElementById("userInput");
     const input = inputField ? inputField.value : "";
 
     if (!input || !input.trim()) return;
 
-    // Process and Display User Message
     const userMsg = { role: "user", content: input };
     brain.history.push(userMsg);
     processInput(input, "user");
@@ -19,7 +18,6 @@ async function sendMessage() {
     
     inputField.value = ""; 
 
-    // AI Response Logic
     setTimeout(async () => {
         const aiText = generateResponse(input);
         
@@ -33,10 +31,10 @@ async function sendMessage() {
     }, 600);
 }
 
-// 2. GENERATOR (Weighted Chaos)
+// 2. GENERATOR (Weighted Logic)
 function generateResponse(userInput) {
     const wordKeys = Object.keys(brain.words);
-    if (wordKeys.length < 3) return null;
+    if (wordKeys.length < 3) return "I am still learning...";
 
     const inputWords = userInput.toLowerCase().replace(/[^\w\s]/gi, '').split(/\s+/);
     let currentWord = inputWords.find(w => brain.words[w]) || wordKeys[Math.floor(Math.random() * wordKeys.length)];
@@ -134,9 +132,8 @@ async function giveFeedback(index, type) {
     await saveBrain();
 }
 
-// 6. STORAGE
+// 6. SYNC SAVING (No LocalStorage)
 async function saveBrain() {
-    localStorage.setItem('jackson_brain', JSON.stringify(brain));
     try {
         await fetch("https://cloudy-boi.raythefemboy.workers.dev/", {
             method: "POST",
@@ -144,40 +141,20 @@ async function saveBrain() {
             body: JSON.stringify({ brain })
         });
     } catch (err) {
-        // School firewall catch
+        console.warn("Sync blocked by network.");
     }
 }
 
-// 7. UTILS
-function downloadBrain() {
-    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(brain));
-    const dlAnchor = document.createElement('a');
-    dlAnchor.setAttribute("href", dataStr);
-    dlAnchor.setAttribute("download", "jackson_brain.json");
-    dlAnchor.click();
-}
-
-function uploadBrain(event) {
-    const file = event.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        try {
-            brain = JSON.parse(e.target.result);
-            localStorage.setItem('jackson_brain', JSON.stringify(brain));
-            location.reload(); 
-        } catch(err) { alert("Invalid brain file!"); }
-    };
-    reader.readAsText(file);
-}
-
-window.onload = () => {
-    const saved = localStorage.getItem('jackson_brain');
-    if (saved) {
-        try {
-            brain = JSON.parse(saved);
-        } catch (e) {
-            console.error("Local storage brain corrupted, resetting.");
+// 7. LOAD FROM GITHUB (Worker)
+window.onload = async () => {
+    try {
+        // We add a random number to the URL to prevent the browser from caching the JSON
+        const response = await fetch("https://raw.githubusercontent.com/RayTheFemboy/god-hivemind/main/brain.json?nocache=" + Math.random());
+        if (response.ok) {
+            brain = await response.json();
+            console.log("Brain synced from GitHub!");
         }
+    } catch (e) {
+        console.error("Could not load brain from GitHub. Starting fresh.");
     }
 };
