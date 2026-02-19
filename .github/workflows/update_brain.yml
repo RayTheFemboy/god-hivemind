@@ -9,17 +9,26 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0 # Important for your Python script to see Git history!
 
       - name: Write new brain.json
         run: |
-          echo '${{ github.event.client_payload.brain }}' > brain.json
+          echo '${{ toJson(github.event.client_payload.brain) }}' > brain.json
 
-      - name: Commit update
+      - name: Run Python Merge
+        run: python3 merge_brain.py
+
+      - name: Commit and Push
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           git config --global user.name "JacksonWeb"
           git config --global user.email "jackson@hivemind.ai"
           git add brain.json
-          git commit -m "Web update" || echo "No changes"
-          git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git
+          if git diff --staged --quiet; then
+            echo "No changes"
+          else
+            git commit -m "AI Brain Sync [skip ci]"
+            git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git main
+          fi
