@@ -4,7 +4,7 @@ let brain = {
     history: []
 };
 
-// 1. THE SEND FUNCTION (Make sure this matches your HTML onclick="sendMessage()")
+// 1. THE SEND FUNCTION
 async function sendMessage() {
     const inputField = document.getElementById("userInput");
     const input = inputField.value;
@@ -17,7 +17,7 @@ async function sendMessage() {
     processInput(input, "user");
     renderMessage(userMsg);
     
-    inputField.value = ""; // Clear the box
+    inputField.value = ""; 
 
     // AI Response Logic
     setTimeout(async () => {
@@ -33,7 +33,7 @@ async function sendMessage() {
     }, 600);
 }
 
-// 2. GENERATOR (Weighted Learning)
+// 2. GENERATOR (Weighted Chaos)
 function generateResponse(userInput) {
     const wordKeys = Object.keys(brain.words);
     if (wordKeys.length < 3) return null;
@@ -47,17 +47,20 @@ function generateResponse(userInput) {
     for (let i = 0; i < limit; i++) {
         const wordData = brain.words[currentWord];
         
+        // Random jump (15% chance) or dead end
         if (!wordData || !wordData.links || wordData.links.length === 0 || Math.random() > 0.85) {
             currentWord = wordKeys[Math.floor(Math.random() * wordKeys.length)];
             continue; 
         }
 
+        // Weighted Selection: Favor links with higher sentiment
         const sortedLinks = [...wordData.links].sort((a, b) => {
             const sentA = brain.words[a]?.sentiment || 0;
             const sentB = brain.words[b]?.sentiment || 0;
             return sentB - sentA; 
         });
 
+        // 70% chance to pick the "best" (liked) word, 30% to pick random
         const nextWord = Math.random() > 0.3 ? sortedLinks[0] : sortedLinks[Math.floor(Math.random() * sortedLinks.length)];
         
         if (nextWord !== currentWord) {
@@ -88,12 +91,13 @@ function processInput(text, role) {
             brain.words[word].links.push(nextWord);
         }
     }
-    brain.patterns.push({ text: cleanText, author: role });
 }
 
 // 4. UI RENDERING
 function renderMessage(msg) {
     const chatBox = document.getElementById("chatBox");
+    if (!chatBox) return;
+
     const index = brain.history.length - 1;
     const isAi = msg.role === "assistant";
     
@@ -114,7 +118,7 @@ function renderMessage(msg) {
     chatBox.scrollTop = chatBox.scrollHeight;
 }
 
-// 5. FEEDBACK & SAVING
+// 5. FEEDBACK
 async function giveFeedback(index, type) {
     const msg = brain.history[index];
     const element = document.getElementById(`msg-${index}`);
@@ -133,6 +137,7 @@ async function giveFeedback(index, type) {
     await saveBrain();
 }
 
+// 6. STORAGE
 async function saveBrain() {
     localStorage.setItem('jackson_brain', JSON.stringify(brain));
     try {
@@ -142,11 +147,11 @@ async function saveBrain() {
             body: JSON.stringify({ brain })
         });
     } catch (err) {
-        console.warn("Sync failed (School Firewall). Saved to LocalStorage.");
+        // Suppress error log for school testing
     }
 }
 
-// 6. UTILS (Upload/Download)
+// 7. UTILS
 function downloadBrain() {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(brain));
     const dlAnchor = document.createElement('a');
@@ -160,9 +165,11 @@ function uploadBrain(event) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (e) => {
-        brain = JSON.parse(e.target.result);
-        localStorage.setItem('jackson_brain', JSON.stringify(brain));
-        location.reload(); 
+        try {
+            brain = JSON.parse(e.target.result);
+            localStorage.setItem('jackson_brain', JSON.stringify(brain));
+            location.reload(); 
+        } catch(err) { alert("Invalid brain file!"); }
     };
     reader.readAsText(file);
 }
