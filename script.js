@@ -1,7 +1,7 @@
 // ---------------------------------------
 // CONFIG
 // ---------------------------------------
-const USER = "raythefemboy";
+const USER = "RayTheFemboy";
 const REPO = "god-hivemind";
 const BRANCH = "main";
 
@@ -17,9 +17,13 @@ let brain = {
 // Load brain.json from GitHub
 // ---------------------------------------
 async function loadBrain() {
-    const res = await fetch(BRAIN_URL);
-    brain = await res.json();
-    console.log("Brain loaded:", brain);
+    try {
+        const res = await fetch(BRAIN_URL + `?t=${Date.now()}`);
+        brain = await res.json();
+        console.log("Brain loaded:", brain);
+    } catch (e) {
+        console.error("Failed to load brain:", e);
+    }
 }
 loadBrain();
 
@@ -135,21 +139,25 @@ function generateReply(message) {
 async function saveBrain() {
     const url = `https://api.github.com/repos/${USER}/${REPO}/actions/workflows/update_brain.yml/dispatches`;
 
-    await fetch(url, {
-        method: "POST",
-        headers: {
-            "Accept": "application/vnd.github+json",
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            ref: BRANCH,
-            inputs: {
-                brain: JSON.stringify(brain)
-            }
-        })
-    });
+    try {
+        const response = await fetch(url, {
+            method: "POST",
+            headers: {
+                "Accept": "application/vnd.github+json",
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                ref: BRANCH,
+                inputs: {
+                    brain: JSON.stringify(brain)
+                }
+            })
+        });
 
-    console.log("Brain update sent to GitHub Action.");
+        console.log("Brain update sent to GitHub Action.", response.status);
+    } catch (e) {
+        console.error("Failed to send brain update:", e);
+    }
 }
 
 // ---------------------------------------
