@@ -4,7 +4,36 @@ let brain = {
     history: []
 };
 
-// 1. GENERATOR: Uses "Weighted" links (favors Green/Liked words)
+// 1. THE SEND FUNCTION (Make sure this matches your HTML onclick="sendMessage()")
+async function sendMessage() {
+    const inputField = document.getElementById("userInput");
+    const input = inputField.value;
+
+    if (!input || !input.trim()) return;
+
+    // Process and Display User Message
+    const userMsg = { role: "user", content: input };
+    brain.history.push(userMsg);
+    processInput(input, "user");
+    renderMessage(userMsg);
+    
+    inputField.value = ""; // Clear the box
+
+    // AI Response Logic
+    setTimeout(async () => {
+        const aiText = generateResponse(input);
+        
+        if (aiText) {
+            const aiMsg = { role: "assistant", content: aiText, feedback: null };
+            brain.history.push(aiMsg);
+            processInput(aiText, "assistant");
+            renderMessage(aiMsg);
+        }
+        await saveBrain();
+    }, 600);
+}
+
+// 2. GENERATOR (Weighted Learning)
 function generateResponse(userInput) {
     const wordKeys = Object.keys(brain.words);
     if (wordKeys.length < 3) return null;
@@ -18,20 +47,17 @@ function generateResponse(userInput) {
     for (let i = 0; i < limit; i++) {
         const wordData = brain.words[currentWord];
         
-        // Random jump (15% chance) to keep things fresh
         if (!wordData || !wordData.links || wordData.links.length === 0 || Math.random() > 0.85) {
             currentWord = wordKeys[Math.floor(Math.random() * wordKeys.length)];
             continue; 
         }
 
-        // WEIGHTED SELECTION: Favor links with better sentiment
         const sortedLinks = [...wordData.links].sort((a, b) => {
             const sentA = brain.words[a]?.sentiment || 0;
             const sentB = brain.words[b]?.sentiment || 0;
             return sentB - sentA; 
         });
 
-        // 70% chance to pick the "best" (liked) word, 30% to pick a random link
         const nextWord = Math.random() > 0.3 ? sortedLinks[0] : sortedLinks[Math.floor(Math.random() * sortedLinks.length)];
         
         if (nextWord !== currentWord) {
@@ -43,7 +69,52 @@ function generateResponse(userInput) {
     return sentence.join(" ");
 }
 
-// 2. FEEDBACK: Boosts sentiment scores for words in liked sentences
+// 3. LEARNER
+function processInput(text, role) {
+    const cleanText = text.toLowerCase().replace(/[^\w\s]/gi, '');
+    const tokens = cleanText.split(/\s+/).filter(t => t.length > 0);
+
+    for (let i = 0; i < tokens.length; i++) {
+        const word = tokens[i];
+        const nextWord = tokens[i + 1];
+
+        if (!brain.words[word]) {
+            brain.words[word] = { seen: 1, links: [], sentiment: 0 };
+        } else {
+            brain.words[word].seen += 1;
+        }
+
+        if (nextWord && !brain.words[word].links.includes(nextWord)) {
+            brain.words[word].links.push(nextWord);
+        }
+    }
+    brain.patterns.push({ text: cleanText, author: role });
+}
+
+// 4. UI RENDERING
+function renderMessage(msg) {
+    const chatBox = document.getElementById("chatBox");
+    const index = brain.history.length - 1;
+    const isAi = msg.role === "assistant";
+    
+    const buttons = isAi ? `
+        <div class="feedback-btns">
+            <button onclick="giveFeedback(${index}, 'like')">(+)</button>
+            <button onclick="giveFeedback(${index}, 'dislike')">(-)</button>
+        </div>` : "";
+
+    const html = `
+        <div id="msg-${index}" class="message ${msg.role}">
+            <div class="msg-content">${msg.content}</div>
+            ${buttons}
+        </div>
+    `;
+    
+    chatBox.innerHTML += html;
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+// 5. FEEDBACK & SAVING
 async function giveFeedback(index, type) {
     const msg = brain.history[index];
     const element = document.getElementById(`msg-${index}`);
@@ -56,14 +127,26 @@ async function giveFeedback(index, type) {
     const tokens = msg.content.toLowerCase().split(/\s+/);
     tokens.forEach(word => {
         if (brain.words[word]) {
-            // Jackson "learns" to like/avoid these words
             brain.words[word].sentiment += (type === 'like' ? 2 : -2);
         }
     });
     await saveBrain();
 }
 
-// 3. UPLOAD/DOWNLOAD: For moving the brain between Home and School
+async function saveBrain() {
+    localStorage.setItem('jackson_brain', JSON.stringify(brain));
+    try {
+        await fetch("https://cloudy-boi.raythefemboy.workers.dev/", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ brain })
+        });
+    } catch (err) {
+        console.warn("Sync failed (School Firewall). Saved to LocalStorage.");
+    }
+}
+
+// 6. UTILS (Upload/Download)
 function downloadBrain() {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(brain));
     const dlAnchor = document.createElement('a');
@@ -79,24 +162,9 @@ function uploadBrain(event) {
     reader.onload = (e) => {
         brain = JSON.parse(e.target.result);
         localStorage.setItem('jackson_brain', JSON.stringify(brain));
-        alert("Brain Uploaded! Jackson is ready.");
-        location.reload(); // Refresh to apply the new brain
+        location.reload(); 
     };
     reader.readAsText(file);
-}
-
-// 4. STORAGE & SYNC
-async function saveBrain() {
-    localStorage.setItem('jackson_brain', JSON.stringify(brain));
-    try {
-        await fetch("https://cloudy-boi.raythefemboy.workers.dev/", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ brain })
-        });
-    } catch (err) {
-        console.warn("Sync failed (likely school firewall).");
-    }
 }
 
 window.onload = () => {
