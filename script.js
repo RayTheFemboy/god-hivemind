@@ -1,114 +1,46 @@
-let brain = {
-    words: {},
-    patterns: [], // We keep this for history, but won't use it for generating
-    history: []
-};
-
-async function sendMessage() {
-    const inputField = document.getElementById("userInput");
-    const input = inputField.value;
-
-    if (!input || !input.trim()) return;
-
-    const userMsg = { role: "user", content: input };
-    brain.history.push(userMsg);
-    processInput(input, "user");
-    renderMessage(userMsg);
-    
-    inputField.value = "";
-
-    setTimeout(async () => {
-        // AI strictly builds a sentence from word associations
-        const aiText = generateResponse(input);
-        
-        if (aiText) {
-            const aiMsg = { role: "assistant", content: aiText, feedback: null };
-            brain.history.push(aiMsg);
-            processInput(aiText, "assistant");
-            renderMessage(aiMsg);
-        }
-
-        await saveBrain();
-    }, 600);
-}
-
-// THE GENERATOR: Builds a sentence word by word
+// NEW: AI favors words with higher sentiment (likes)
 function generateResponse(userInput) {
     const wordKeys = Object.keys(brain.words);
     if (wordKeys.length < 3) return null;
 
-    // Try to start with a word the user just typed
     const inputWords = userInput.toLowerCase().replace(/[^\w\s]/gi, '').split(/\s+/);
     let currentWord = inputWords.find(w => brain.words[w]) || wordKeys[Math.floor(Math.random() * wordKeys.length)];
     
     let sentence = [currentWord];
-    let limit = 10; // Max sentence length
+    let limit = 12; 
 
     for (let i = 0; i < limit; i++) {
         const wordData = brain.words[currentWord];
         
-        // If the word has no links (it was the end of a sentence), stop or pick random
-        if (!wordData || !wordData.links || wordData.links.length === 0) break;
+        // Random jump chance (reduced to 15% to allow learning to shine)
+        if (!wordData || !wordData.links || wordData.links.length === 0 || Math.random() > 0.85) {
+            currentWord = wordKeys[Math.floor(Math.random() * wordKeys.length)];
+            continue; 
+        }
 
-        // Pick a "link" (a word that followed this word before)
-        const nextWord = wordData.links[Math.floor(Math.random() * wordData.links.length)];
+        // WEIGHTED SELECTION: Favor links with better sentiment
+        // We sort the links so words with higher sentiment have a better chance
+        const sortedLinks = [...wordData.links].sort((a, b) => {
+            const sentA = brain.words[a]?.sentiment || 0;
+            const sentB = brain.words[b]?.sentiment || 0;
+            return sentB - sentA; 
+        });
+
+        // 70% chance to pick the "best" (liked) word, 30% to pick a random link
+        const nextWord = Math.random() > 0.3 ? sortedLinks[0] : sortedLinks[Math.floor(Math.random() * sortedLinks.length)];
         
-        sentence.push(nextWord);
-        currentWord = nextWord;
+        if (nextWord !== currentWord) {
+            sentence.push(nextWord);
+            currentWord = nextWord;
+        }
 
-        // Randomly decide to end the sentence if it's long enough
-        if (i > 3 && Math.random() > 0.7) break;
+        if (i > 5 && Math.random() > 0.6) break;
     }
 
     return sentence.join(" ");
 }
 
-// THE LEARNER: Maps how words connect to each other
-function processInput(text, role) {
-    const cleanText = text.toLowerCase().replace(/[^\w\s]/gi, '');
-    const tokens = cleanText.split(/\s+/).filter(t => t.length > 0);
-
-    for (let i = 0; i < tokens.length; i++) {
-        const word = tokens[i];
-        const nextWord = tokens[i + 1]; // The word that follows
-
-        if (!brain.words[word]) {
-            brain.words[word] = { seen: 1, links: [], sentiment: 0 };
-        } else {
-            brain.words[word].seen += 1;
-        }
-
-        // IMPORTANT: This records that 'nextWord' follows 'word'
-        if (nextWord && !brain.words[word].links.includes(nextWord)) {
-            brain.words[word].links.push(nextWord);
-        }
-    }
-
-    brain.patterns.push({ text: cleanText, author: role });
-}
-
-function renderMessage(msg) {
-    const chatBox = document.getElementById("chatBox");
-    const index = brain.history.length - 1;
-    const isAi = msg.role === "assistant";
-    
-    const buttons = isAi ? `
-        <div class="feedback-btns">
-            <button onclick="giveFeedback(${index}, 'like')">(+)</button>
-            <button onclick="giveFeedback(${index}, 'dislike')">(-)</button>
-        </div>` : "";
-
-    const html = `
-        <div id="msg-${index}" class="message ${msg.role}">
-            <div class="msg-content">${msg.content}</div>
-            ${buttons}
-        </div>
-    `;
-    
-    chatBox.innerHTML += html;
-    chatBox.scrollTop = chatBox.scrollHeight;
-}
-
+// Updated Feedback: Now affects word weights immediately
 async function giveFeedback(index, type) {
     const msg = brain.history[index];
     const element = document.getElementById(`msg-${index}`);
@@ -121,30 +53,22 @@ async function giveFeedback(index, type) {
     const tokens = msg.content.toLowerCase().split(/\s+/);
     tokens.forEach(word => {
         if (brain.words[word]) {
-            brain.words[word].sentiment += (type === 'like' ? 1 : -1);
+            // Stronger weight: +2 for like, -2 for dislike
+            brain.words[word].sentiment += (type === 'like' ? 2 : -2);
         }
     });
 
+    console.log("Brain updated with sentiment. Jackson will now favor/avoid these words.");
     await saveBrain();
 }
 
-async function saveBrain() {
-    // Backup to LocalStorage because of school filters
-    localStorage.setItem('jackson_brain', JSON.stringify(brain));
-
-    try {
-        await fetch("https://cloudy-boi.raythefemboy.workers.dev/", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ brain })
-        });
-    } catch (err) {
-        console.warn("Sync blocked by firewall. Saving locally.");
-    }
+// NEW: Manual Download Function for school use
+function downloadBrain() {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(brain, null, 2));
+    const downloadAnchorNode = document.createElement('a');
+    downloadAnchorNode.setAttribute("href", dataStr);
+    downloadAnchorNode.setAttribute("download", "jackson_brain.json");
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove();
 }
-
-// Reload brain from memory when opening the page
-window.onload = () => {
-    const saved = localStorage.getItem('jackson_brain');
-    if (saved) brain = JSON.parse(saved);
-};
