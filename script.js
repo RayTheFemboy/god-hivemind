@@ -4,7 +4,6 @@ let brain = {
     history: []
 };
 
-// Main function triggered by the Send button
 async function sendMessage() {
     const inputField = document.getElementById("userInput");
     const input = inputField.value;
@@ -17,43 +16,42 @@ async function sendMessage() {
     processInput(input, "user");
     renderMessage(userMsg);
     
-    // Clear input immediately for better UX
     inputField.value = "";
 
-    // 2. Generate and Display AI Response
-    // We wait a moment to simulate the AI "thinking"
+    // 2. Generate AI Response from learned data
     setTimeout(async () => {
-        const aiText = generateResponse(input);
-        const aiMsg = { 
-            role: "assistant", 
-            content: aiText, 
-            feedback: null 
-        };
+        const aiText = generateResponse();
         
-        brain.history.push(aiMsg);
-        processInput(aiText, "assistant"); // AI learns from its own structure
-        renderMessage(aiMsg);
+        // Only show a response if the AI actually has something learned to say
+        if (aiText) {
+            const aiMsg = { 
+                role: "assistant", 
+                content: aiText, 
+                feedback: null 
+            };
+            
+            brain.history.push(aiMsg);
+            processInput(aiText, "assistant");
+            renderMessage(aiMsg);
+        }
 
-        // 3. Sync the updated brain to Cloudflare/GitHub
+        // 3. Sync to Cloudflare/GitHub
         await saveBrain();
     }, 600);
 }
 
-// Simple logic to make the AI talk using patterns it has learned
-function generateResponse(input) {
-    if (brain.patterns.length < 2) {
-        return "I am still listening and learning from you.";
-    }
+// Strictly organic response generation
+function generateResponse() {
+    if (brain.patterns.length === 0) return null;
     
-    // Picks a random pattern previously learned
+    // Selects a random pattern learned from the user or previous successful AI outputs
     const randomIndex = Math.floor(Math.random() * brain.patterns.length);
     const pattern = brain.patterns[randomIndex];
     
-    // Patterns are stored as objects {text: "...", author: "..."}
-    return pattern.text || "Tell me more about that.";
+    // Returns the learned text, or null if nothing exists
+    return typeof pattern === 'string' ? pattern : (pattern.text || null);
 }
 
-// Breaks down sentences into words and patterns for the JSON brain
 function processInput(text, role) {
     const cleanText = text.toLowerCase().replace(/[^\w\s]/gi, '');
     const tokens = cleanText.split(/\s+/).filter(t => t.length > 0);
@@ -69,13 +67,11 @@ function processInput(text, role) {
     brain.patterns.push({ text: cleanText, author: role });
 }
 
-// Handles the visual side of the chat
 function renderMessage(msg) {
     const chatBox = document.getElementById("chatBox");
     const index = brain.history.length - 1;
     const isAi = msg.role === "assistant";
     
-    // Only AI messages get the rating buttons (+) and (-)
     const buttons = isAi ? `
         <div class="feedback-btns">
             <button onclick="giveFeedback(${index}, 'like')">(+)</button>
@@ -93,7 +89,6 @@ function renderMessage(msg) {
     chatBox.scrollTop = chatBox.scrollHeight;
 }
 
-// Updates sentiment and highlights the box (Green for Like, Red for Dislike)
 async function giveFeedback(index, type) {
     const msg = brain.history[index];
     const element = document.getElementById(`msg-${index}`);
@@ -102,16 +97,14 @@ async function giveFeedback(index, type) {
 
     msg.feedback = type;
 
-    // Apply the "Selected" colors
     if (type === 'like') {
-        element.style.backgroundColor = "#1b5e20"; // Deep Green
+        element.style.backgroundColor = "#1b5e20"; 
         element.style.borderColor = "#00e676";
     } else {
-        element.style.backgroundColor = "#b71c1c"; // Deep Red
+        element.style.backgroundColor = "#b71c1c"; 
         element.style.borderColor = "#ff5252";
     }
 
-    // Adjust word sentiment in the brain
     const tokens = msg.content.toLowerCase().replace(/[^\w\s]/gi, '').split(/\s+/);
     tokens.forEach(word => {
         if (brain.words[word]) {
@@ -119,25 +112,17 @@ async function giveFeedback(index, type) {
         }
     });
 
-    // Save the sentiment change to GitHub
     await saveBrain();
 }
 
-// Sends the data to your Cloudflare Worker
 async function saveBrain() {
     try {
-        const response = await fetch("https://cloudy-boi.raythefemboy.workers.dev/", {
+        await fetch("https://cloudy-boi.raythefemboy.workers.dev/", {
             method: "POST",
-            headers: { 
-                "Content-Type": "application/json" 
-            },
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ brain })
         });
-        
-        if (!response.ok) {
-            console.error("Worker rejected the sync:", response.status);
-        }
     } catch (err) {
-        console.error("Sync error: Ensure your Worker has CORS enabled.", err);
+        console.error("Sync error: Check CORS settings in Worker.", err);
     }
 }
