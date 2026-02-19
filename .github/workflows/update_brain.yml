@@ -1,12 +1,8 @@
 name: Update Brain From Web
 
 on:
-  workflow_dispatch:
-    inputs:
-      brain:
-        description: "Updated brain JSON"
-        required: true
-        type: string
+  repository_dispatch:
+    types: [update-brain]
 
 jobs:
   update:
@@ -16,7 +12,7 @@ jobs:
 
       - name: Write new brain.json
         run: |
-          echo '${{ inputs.brain }}' > brain.json
+          echo '${{ github.event.client_payload.brain }}' > brain.json
 
       - name: Commit update
         env:
