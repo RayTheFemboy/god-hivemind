@@ -1,6 +1,6 @@
 let brain = {
     words: {},
-    patterns: [],
+    patterns: [], // We keep this for history, but won't use it for generating
     history: []
 };
 
@@ -10,7 +10,6 @@ async function sendMessage() {
 
     if (!input || !input.trim()) return;
 
-    // 1. Process User Message
     const userMsg = { role: "user", content: input };
     brain.history.push(userMsg);
     processInput(input, "user");
@@ -18,17 +17,12 @@ async function sendMessage() {
     
     inputField.value = "";
 
-    // 2. Generate AI Response using word-links
     setTimeout(async () => {
+        // AI strictly builds a sentence from word associations
         const aiText = generateResponse(input);
         
         if (aiText) {
-            const aiMsg = { 
-                role: "assistant", 
-                content: aiText, 
-                feedback: null 
-            };
-            
+            const aiMsg = { role: "assistant", content: aiText, feedback: null };
             brain.history.push(aiMsg);
             processInput(aiText, "assistant");
             renderMessage(aiMsg);
@@ -38,41 +32,45 @@ async function sendMessage() {
     }, 600);
 }
 
-// Organic Word-Association Generator
+// THE GENERATOR: Builds a sentence word by word
 function generateResponse(userInput) {
     const wordKeys = Object.keys(brain.words);
-    if (wordKeys.length < 5) return null; // Wait until it knows enough words
+    if (wordKeys.length < 3) return null;
 
-    // Pick a starting word from the user's input if possible, otherwise random
-    const inputWords = userInput.toLowerCase().split(/\s+/);
+    // Try to start with a word the user just typed
+    const inputWords = userInput.toLowerCase().replace(/[^\w\s]/gi, '').split(/\s+/);
     let currentWord = inputWords.find(w => brain.words[w]) || wordKeys[Math.floor(Math.random() * wordKeys.length)];
     
     let sentence = [currentWord];
-    let maxLength = 8; // Keep sentences reasonably short
+    let limit = 10; // Max sentence length
 
-    for (let i = 0; i < maxLength; i++) {
+    for (let i = 0; i < limit; i++) {
         const wordData = brain.words[currentWord];
-        if (!wordData || wordData.links.length === 0) break;
+        
+        // If the word has no links (it was the end of a sentence), stop or pick random
+        if (!wordData || !wordData.links || wordData.links.length === 0) break;
 
-        // Pick a next word from the links associated with the current word
+        // Pick a "link" (a word that followed this word before)
         const nextWord = wordData.links[Math.floor(Math.random() * wordData.links.length)];
+        
         sentence.push(nextWord);
         currentWord = nextWord;
 
-        // 20% chance to stop early if the sentence is getting long
-        if (i > 3 && Math.random() > 0.8) break;
+        // Randomly decide to end the sentence if it's long enough
+        if (i > 3 && Math.random() > 0.7) break;
     }
 
     return sentence.join(" ");
 }
 
+// THE LEARNER: Maps how words connect to each other
 function processInput(text, role) {
     const cleanText = text.toLowerCase().replace(/[^\w\s]/gi, '');
     const tokens = cleanText.split(/\s+/).filter(t => t.length > 0);
 
     for (let i = 0; i < tokens.length; i++) {
         const word = tokens[i];
-        const nextWord = tokens[i + 1];
+        const nextWord = tokens[i + 1]; // The word that follows
 
         if (!brain.words[word]) {
             brain.words[word] = { seen: 1, links: [], sentiment: 0 };
@@ -80,7 +78,7 @@ function processInput(text, role) {
             brain.words[word].seen += 1;
         }
 
-        // Link this word to the one that follows it
+        // IMPORTANT: This records that 'nextWord' follows 'word'
         if (nextWord && !brain.words[word].links.includes(nextWord)) {
             brain.words[word].links.push(nextWord);
         }
@@ -94,7 +92,6 @@ function renderMessage(msg) {
     const index = brain.history.length - 1;
     const isAi = msg.role === "assistant";
     
-    // Buttons only show for AI
     const buttons = isAi ? `
         <div class="feedback-btns">
             <button onclick="giveFeedback(${index}, 'like')">(+)</button>
@@ -115,18 +112,11 @@ function renderMessage(msg) {
 async function giveFeedback(index, type) {
     const msg = brain.history[index];
     const element = document.getElementById(`msg-${index}`);
-    
     if (!msg || !element) return;
 
     msg.feedback = type;
-
-    if (type === 'like') {
-        element.style.backgroundColor = "#1b5e20"; 
-        element.style.borderColor = "#00e676";
-    } else {
-        element.style.backgroundColor = "#b71c1c"; 
-        element.style.borderColor = "#ff5252";
-    }
+    element.style.backgroundColor = type === 'like' ? "#1b5e20" : "#b71c1c";
+    element.style.borderColor = type === 'like' ? "#00e676" : "#ff5252";
 
     const tokens = msg.content.toLowerCase().split(/\s+/);
     tokens.forEach(word => {
@@ -139,7 +129,7 @@ async function giveFeedback(index, type) {
 }
 
 async function saveBrain() {
-    // Attempting to save to LocalStorage so it works even if school blocks the worker
+    // Backup to LocalStorage because of school filters
     localStorage.setItem('jackson_brain', JSON.stringify(brain));
 
     try {
@@ -149,11 +139,11 @@ async function saveBrain() {
             body: JSON.stringify({ brain })
         });
     } catch (err) {
-        console.warn("Worker blocked by school filter. Saving to browser memory instead.");
+        console.warn("Sync blocked by firewall. Saving locally.");
     }
 }
 
-// Load brain from LocalStorage on startup
+// Reload brain from memory when opening the page
 window.onload = () => {
     const saved = localStorage.getItem('jackson_brain');
     if (saved) brain = JSON.parse(saved);
