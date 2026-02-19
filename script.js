@@ -154,7 +154,7 @@ async function saveBrain() {
     });
 
     console.log("Brain update sent to GitHub Action.");
-}// ---------------------------------------
+}}// ---------------------------------------
 // Chat UI
 // ---------------------------------------
 function sendMessage() {
