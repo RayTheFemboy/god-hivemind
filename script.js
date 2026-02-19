@@ -6,35 +6,41 @@ let brain = {
 
 async function sendMessage() {
     const input = document.getElementById("userInput").value;
-    
-    // Check if input is empty
-    if (!input || !input.trim()) {
-        console.log("Input is empty, stopping.");
-        return;
-    }
+    if (!input || !input.trim()) return;
 
-    console.log("Sending message:", input);
-
-    // 1. Create the data object
-    const userMessage = {
-        role: "user",
-        content: input,
-        timestamp: new Date().toISOString(),
-        feedback: null
-    };
-    
-    // 2. Add to history and process
-    brain.history.push(userMessage);
+    // 1. Process User Input
+    const userMsg = { role: "user", content: input };
+    brain.history.push(userMsg);
     processInput(input, "user");
-
-    // 3. Show it on the screen
-    renderMessage(userMessage);
-
-    // 4. Clear the text area immediately
+    renderMessage(userMsg);
     document.getElementById("userInput").value = "";
 
-    // 5. Send to Cloudflare
+    // 2. AI Responds (Simple pattern matching from its own brain)
+    const aiText = generateResponse(input);
+    const aiMsg = { role: "assistant", content: aiText, feedback: null };
+    
+    // AI learns from itself too (structure-wise)
+    processInput(aiText, "assistant");
+    brain.history.push(aiMsg);
+    
+    // Small delay to make it feel like it's "thinking"
+    setTimeout(() => {
+        renderMessage(aiMsg);
+    }, 500);
+
     await saveBrain();
+}
+
+// Simple logic to make the AI "talk" using words it knows
+function generateResponse(input) {
+    const knownWords = Object.keys(brain.words);
+    if (knownWords.length < 3) return "I am still listening and learning...";
+    
+    // Picks a random pattern it has seen before
+    const randomPattern = brain.patterns[Math.floor(Math.random() * brain.patterns.length)];
+    const patternText = typeof randomPattern === 'string' ? randomPattern : randomPattern.text;
+    
+    return patternText || "Interesting. Tell me more.";
 }
 
 function processInput(text, role) {
@@ -47,34 +53,26 @@ function processInput(text, role) {
         } else {
             brain.words[word].seen += 1;
         }
-        
-        tokens.forEach(link => {
-            if (link !== word && !brain.words[word].links.includes(link)) {
-                brain.words[word].links.push(link);
-            }
-        });
     });
-
     brain.patterns.push({ text: cleanText, author: role });
 }
 
 function renderMessage(msg) {
     const chatBox = document.getElementById("chatBox");
-    if (!chatBox) {
-        console.error("Could not find chatBox element!");
-        return;
-    }
-
     const index = brain.history.length - 1;
+    const isAi = msg.role === "assistant";
     
-    // This creates the message bubble
+    // Only add buttons if it's the AI speaking
+    const buttons = isAi ? `
+        <div class="feedback-btns">
+            <button onclick="giveFeedback(${index}, 'like')">(+)</button>
+            <button onclick="giveFeedback(${index}, 'dislike')">(-)</button>
+        </div>` : "";
+
     const html = `
-        <div id="msg-${index}" class="message user">
+        <div id="msg-${index}" class="message ${msg.role}">
             <div class="msg-content">${msg.content}</div>
-            <div class="feedback-btns">
-                <button onclick="giveFeedback(${index}, 'like')">(+)</button>
-                <button onclick="giveFeedback(${index}, 'dislike')">(-)</button>
-            </div>
+            ${buttons}
         </div>
     `;
     
@@ -84,36 +82,36 @@ function renderMessage(msg) {
 
 async function giveFeedback(index, type) {
     const msg = brain.history[index];
-    if (!msg) return;
-
-    msg.feedback = type;
-    const tokens = msg.content.toLowerCase().replace(/[^\w\s]/gi, '').split(/\s+/);
+    const element = document.getElementById(`msg-${index}`);
     
+    msg.feedback = type;
+
+    // Color in the box based on selection
+    if (type === 'like') {
+        element.style.backgroundColor = "#1b5e20"; // Dark Green
+        element.style.borderColor = "#00e676";
+    } else {
+        element.style.backgroundColor = "#b71c1c"; // Dark Red
+        element.style.borderColor = "#ff5252";
+    }
+
+    // Update word sentiment
+    const tokens = msg.content.toLowerCase().replace(/[^\w\s]/gi, '').split(/\s+/);
     tokens.forEach(word => {
         if (brain.words[word]) {
             brain.words[word].sentiment += (type === 'like' ? 1 : -1);
         }
     });
 
-    console.log(`Rated message ${index} as ${type}`);
     await saveBrain();
-    
-    // Visual feedback for the rating
-    const element = document.getElementById(`msg-${index}`);
-    if (element) {
-        element.style.borderLeft = type === 'like' ? "4px solid #03dac6" : "4px solid #cf6679";
-    }
 }
 
 async function saveBrain() {
     try {
-        const response = await fetch("https://cloudy-boi.raythefemboy.workers.dev/", {
+        await fetch("https://cloudy-boi.raythefemboy.workers.dev/", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ brain })
         });
-        console.log("Cloudflare Response:", await response.text());
-    } catch (err) {
-        console.error("Failed to sync brain:", err);
-    }
+    } catch (err) { console.error("Sync error"); }
 }
