@@ -137,30 +137,24 @@ function generateReply(message) {
 // SAVE BRAIN (GitHub Action trigger)
 // ---------------------------------------
 async function saveBrain() {
-    const url = `https://api.github.com/repos/${USER}/${REPO}/actions/workflows/update_brain.yml/dispatches`;
+    const url = `https://api.github.com/repos/${USER}/${REPO}/dispatches`;
 
-    try {
-        const response = await fetch(url, {
-            method: "POST",
-            headers: {
-                "Accept": "application/vnd.github+json",
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                ref: BRANCH,
-                inputs: {
-                    brain: JSON.stringify(brain)
-                }
-            })
-        });
+    await fetch(url, {
+        method: "POST",
+        headers: {
+            "Accept": "application/vnd.github+json",
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+            event_type: "update-brain",
+            client_payload: {
+                brain: JSON.stringify(brain)
+            }
+        })
+    });
 
-        console.log("Brain update sent to GitHub Action.", response.status);
-    } catch (e) {
-        console.error("Failed to send brain update:", e);
-    }
-}
-
-// ---------------------------------------
+    console.log("Brain update sent to GitHub Action.");
+}// ---------------------------------------
 // Chat UI
 // ---------------------------------------
 function sendMessage() {
