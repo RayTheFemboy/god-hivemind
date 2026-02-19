@@ -1,8 +1,6 @@
-const USER = "raythefemboy";
-const REPO = "god-hivemind";
-const BRANCH = "main";
-
-const BRAIN_URL = `https://raw.githubusercontent.com/${USER}/${REPO}/${BRANCH}/brain.json`;
+// ---------------------------------------
+// Load or initialize brain
+// ---------------------------------------
 
 let brain = {
     words: {},
@@ -10,57 +8,123 @@ let brain = {
     history: []
 };
 
-// Load brain from GitHub
+// Load brain.json from GitHub (already handled by your loadBrain function)
 async function loadBrain() {
     const res = await fetch(BRAIN_URL);
     brain = await res.json();
     console.log("Brain loaded:", brain);
 }
-
 loadBrain();
 
-// Basic Jackson logic
-function learn(text) {
-    const words = text.toLowerCase().split(" ");
+// ---------------------------------------
+// Ensure word entry exists
+// ---------------------------------------
+function ensureWord(word) {
+    if (!brain.words[word]) {
+        brain.words[word] = {
+            definition: null,
+            seen: 0,
+            links: []
+        };
+    }
+    return brain.words[word];
+}
 
-    for (let w of words) {
-        if (!brain.words[w]) {
-            brain.words[w] = { seen: 1, definition: null, links: [] };
-        } else {
-            brain.words[w].seen++;
+// ---------------------------------------
+// Learn words and associations
+// ---------------------------------------
+function learnWords(message) {
+    const words = message.toLowerCase().split(/\s+/);
+
+    for (let i = 0; i < words.length; i++) {
+        const w = words[i];
+        const entry = ensureWord(w);
+        entry.seen += 1;
+
+        const neighbors = [
+            ...words.slice(Math.max(0, i - 2), i),
+            ...words.slice(i + 1, i + 3)
+        ];
+
+        for (const n of neighbors) {
+            if (n !== w && !entry.links.includes(n)) {
+                entry.links.push(n);
+            }
         }
     }
-
-    brain.history.push(text);
 }
 
-function generateReply() {
-    const keys = Object.keys(brain.words);
-    if (keys.length === 0) return "I am still learning.";
+// ---------------------------------------
+// Learn definitions: "x is y"
+// ---------------------------------------
+function learnDefinitions(message) {
+    if (!message.includes(" is ")) return;
 
-    const top = keys.sort((a, b) => brain.words[b].seen - brain.words[a].seen)[0];
-    return "I am thinking about " + top + ".";
+    const parts = message.split(" is ");
+    if (parts.length !== 2) return;
+
+    const subject = parts[0].trim().toLowerCase();
+    const definition = parts[1].trim();
+
+    const entry = ensureWord(subject);
+    entry.definition = definition;
 }
 
-// Send updated brain to GitHub Action
-async function saveBrain() {
-    await fetch(`https://api.github.com/repos/${USER}/${REPO}/dispatches`, {
-        method: "POST",
-        headers: {
-            "Accept": "application/vnd.github+json"
-        },
-        body: JSON.stringify({
-            event_type: "update-brain",
-            client_payload: {
-                brain: JSON.stringify(brain)
+// ---------------------------------------
+// Learn sentence patterns
+// ---------------------------------------
+function learnPatterns(message) {
+    const words = message.toLowerCase().split(/\s+/);
+    if (words.length > 2) {
+        brain.patterns.push(words);
+    }
+}
+
+// ---------------------------------------
+// Generate a reply using learned patterns
+// ---------------------------------------
+function generateReply(message) {
+    const words = message.toLowerCase().split(/\s+/);
+    if (words.length === 0) return "";
+
+    const chosen = words[Math.floor(Math.random() * words.length)];
+    const entry = brain.words[chosen];
+
+    // 1. If definition exists, use it
+    if (entry && entry.definition) {
+        return `${chosen} ${entry.definition}`;
+    }
+
+    // 2. If patterns exist, generate a new sentence
+    if (brain.patterns.length > 0) {
+        const pattern = brain.patterns[Math.floor(Math.random() * brain.patterns.length)];
+        const output = [];
+
+        for (const w of pattern) {
+            if (brain.words[w] && brain.words[w].links.length > 0) {
+                const linkList = brain.words[w].links;
+                const randomLink = linkList[Math.floor(Math.random() * linkList.length)];
+                output.push(randomLink);
+            } else {
+                output.push(w);
             }
-        })
-    });
+        }
 
-    console.log("Brain update sent to GitHub Action.");
+        return output.join(" ");
+    }
+
+    // 3. If associations exist, use them
+    if (entry && entry.links.length > 0) {
+        return [chosen, ...entry.links.slice(0, 3)].join(" ");
+    }
+
+    // 4. Last fallback: echo the word
+    return chosen;
 }
 
-// Chat UI
+// ---------------------------------------
+// Chat UI + Learning + Saving
+// ---------------------------------------
 function sendMessage() {
     const input = document.getElementById("userInput");
     const text = input.value.trim();
@@ -68,11 +132,16 @@ function sendMessage() {
 
     addMessage("You: " + text, "user");
 
-    learn(text);
-    const reply = generateReply();
+    brain.history.push(text);
+
+    learnWords(text);
+    learnDefinitions(text);
+    learnPatterns(text);
+
+    const reply = generateReply(text);
     addMessage("Jackson: " + reply, "bot");
 
-    saveBrain(); // Save after every message
+    saveBrain(); // triggers GitHub Action
 
     input.value = "";
 }
