@@ -1,14 +1,14 @@
 let brain = {
     words: {},
     patterns: [],
-    history: [] // Now tracks 'role' to tell who is talking
+    history: []
 };
 
 async function sendMessage() {
     const input = document.getElementById("userInput").value;
     if (!input.trim()) return;
 
-    // 1. Process User Input
+    // 1. Create User Data
     const userMessage = {
         role: "user",
         content: input,
@@ -16,27 +16,15 @@ async function sendMessage() {
         feedback: null
     };
     
+    // 2. Process and Learn (Silent)
     processInput(input, "user");
     brain.history.push(userMessage);
 
-    // 2. Display message and Clear Input
+    // 3. Update UI (Only shows User)
     renderMessage(userMessage);
     document.getElementById("userInput").value = "";
 
-    // 3. Simple AI "Response" Logic (For demonstration)
-    // In a real setup, your Worker or Java backend would generate this
-    const aiResponse = {
-        role: "assistant",
-        content: "I am learning from: " + input,
-        timestamp: new Date().toISOString(),
-        feedback: null
-    };
-    
-    processInput(aiResponse.content, "assistant");
-    brain.history.push(aiResponse);
-    renderMessage(aiResponse);
-
-    // 4. Sync to GitHub
+    // 4. Sync to Cloudflare/GitHub
     await saveBrain();
 }
 
@@ -51,7 +39,6 @@ function processInput(text, role) {
             brain.words[word].seen += 1;
         }
         
-        // Associate words
         tokens.forEach(link => {
             if (link !== word && !brain.words[word].links.includes(link)) {
                 brain.words[word].links.push(link);
@@ -59,16 +46,13 @@ function processInput(text, role) {
         });
     });
 
-    // Patterns now track who said them
     brain.patterns.push({ text: cleanText, author: role });
 }
 
-// Feedback Logic
 async function giveFeedback(index, type) {
     const msg = brain.history[index];
-    msg.feedback = type; // 'like' or 'dislike'
+    msg.feedback = type;
 
-    // Adjust word sentiment based on feedback
     const tokens = msg.content.toLowerCase().replace(/[^\w\s]/gi, '').split(/\s+/);
     tokens.forEach(word => {
         if (brain.words[word]) {
@@ -76,27 +60,25 @@ async function giveFeedback(index, type) {
         }
     });
 
-    console.log(`Message ${index} ${type}d`);
     await saveBrain();
-    // Refresh UI to show active button state
-    document.getElementById(`msg-${index}`).classList.add(type);
+    document.getElementById(`msg-${index}`).style.borderLeft = type === 'like' ? "4px solid #03dac6" : "4px solid #cf6679";
 }
 
-// UI Rendering
 function renderMessage(msg) {
     const chatBox = document.getElementById("chatBox");
     const index = brain.history.length - 1;
     
     const html = `
-        <div id="msg-${index}" class="message ${msg.role}">
-            <p>${msg.content}</p>
+        <div id="msg-${index}" class="message user">
+            <div>${msg.content}</div>
             <div class="feedback-btns">
-                <button onclick="giveFeedback(${index}, 'like')">👍</button>
-                <button onclick="giveFeedback(${index}, 'dislike')">👎</button>
+                <button onclick="giveFeedback(${index}, 'like')">(+)</button>
+                <button onclick="giveFeedback(${index}, 'dislike')">(-)</button>
             </div>
         </div>
     `;
     chatBox.innerHTML += html;
+    chatBox.scrollTop = chatBox.scrollHeight;
 }
 
 async function saveBrain() {
