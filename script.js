@@ -4,26 +4,24 @@ let brain = {
     history: []
 };
 
-// Main function to handle sending messages
 async function sendMessage() {
     const inputField = document.getElementById("userInput");
     const input = inputField.value;
 
     if (!input || !input.trim()) return;
 
-    // 1. Process and Display User Message
+    // 1. Process User Message
     const userMsg = { role: "user", content: input };
     brain.history.push(userMsg);
     processInput(input, "user");
     renderMessage(userMsg);
     
-    inputField.value = ""; // Clear input immediately
+    inputField.value = "";
 
-    // 2. Generate AI Response (Organic only)
+    // 2. Generate AI Response using word-links
     setTimeout(async () => {
-        const aiText = generateResponse();
+        const aiText = generateResponse(input);
         
-        // Only render if the AI has actually learned a pattern to say
         if (aiText) {
             const aiMsg = { 
                 role: "assistant", 
@@ -36,34 +34,57 @@ async function sendMessage() {
             renderMessage(aiMsg);
         }
 
-        // 3. Sync to Cloudflare/GitHub
         await saveBrain();
     }, 600);
 }
 
-// Strictly organic: only uses what it has learned from patterns
-function generateResponse() {
-    if (brain.patterns.length === 0) return null;
+// Organic Word-Association Generator
+function generateResponse(userInput) {
+    const wordKeys = Object.keys(brain.words);
+    if (wordKeys.length < 5) return null; // Wait until it knows enough words
+
+    // Pick a starting word from the user's input if possible, otherwise random
+    const inputWords = userInput.toLowerCase().split(/\s+/);
+    let currentWord = inputWords.find(w => brain.words[w]) || wordKeys[Math.floor(Math.random() * wordKeys.length)];
     
-    // Selects a random pattern learned from the user
-    const randomIndex = Math.floor(Math.random() * brain.patterns.length);
-    const pattern = brain.patterns[randomIndex];
-    
-    // Returns the text if it's a string, or the text property if it's an object
-    return typeof pattern === 'string' ? pattern : (pattern.text || null);
+    let sentence = [currentWord];
+    let maxLength = 8; // Keep sentences reasonably short
+
+    for (let i = 0; i < maxLength; i++) {
+        const wordData = brain.words[currentWord];
+        if (!wordData || wordData.links.length === 0) break;
+
+        // Pick a next word from the links associated with the current word
+        const nextWord = wordData.links[Math.floor(Math.random() * wordData.links.length)];
+        sentence.push(nextWord);
+        currentWord = nextWord;
+
+        // 20% chance to stop early if the sentence is getting long
+        if (i > 3 && Math.random() > 0.8) break;
+    }
+
+    return sentence.join(" ");
 }
 
 function processInput(text, role) {
     const cleanText = text.toLowerCase().replace(/[^\w\s]/gi, '');
     const tokens = cleanText.split(/\s+/).filter(t => t.length > 0);
 
-    tokens.forEach(word => {
+    for (let i = 0; i < tokens.length; i++) {
+        const word = tokens[i];
+        const nextWord = tokens[i + 1];
+
         if (!brain.words[word]) {
             brain.words[word] = { seen: 1, links: [], sentiment: 0 };
         } else {
             brain.words[word].seen += 1;
         }
-    });
+
+        // Link this word to the one that follows it
+        if (nextWord && !brain.words[word].links.includes(nextWord)) {
+            brain.words[word].links.push(nextWord);
+        }
+    }
 
     brain.patterns.push({ text: cleanText, author: role });
 }
@@ -73,7 +94,7 @@ function renderMessage(msg) {
     const index = brain.history.length - 1;
     const isAi = msg.role === "assistant";
     
-    // Only AI messages get the (+) and (-) rating buttons
+    // Buttons only show for AI
     const buttons = isAi ? `
         <div class="feedback-btns">
             <button onclick="giveFeedback(${index}, 'like')">(+)</button>
@@ -88,7 +109,7 @@ function renderMessage(msg) {
     `;
     
     chatBox.innerHTML += html;
-    chatBox.scrollTop = chatBox.scrollHeight; // Auto-scroll
+    chatBox.scrollTop = chatBox.scrollHeight;
 }
 
 async function giveFeedback(index, type) {
@@ -99,16 +120,15 @@ async function giveFeedback(index, type) {
 
     msg.feedback = type;
 
-    // "Color in" the box based on selection
     if (type === 'like') {
-        element.style.backgroundColor = "#1b5e20"; // Dark Green
+        element.style.backgroundColor = "#1b5e20"; 
         element.style.borderColor = "#00e676";
     } else {
-        element.style.backgroundColor = "#b71c1c"; // Dark Red
+        element.style.backgroundColor = "#b71c1c"; 
         element.style.borderColor = "#ff5252";
     }
 
-    const tokens = msg.content.toLowerCase().replace(/[^\w\s]/gi, '').split(/\s+/);
+    const tokens = msg.content.toLowerCase().split(/\s+/);
     tokens.forEach(word => {
         if (brain.words[word]) {
             brain.words[word].sentiment += (type === 'like' ? 1 : -1);
@@ -119,15 +139,22 @@ async function giveFeedback(index, type) {
 }
 
 async function saveBrain() {
+    // Attempting to save to LocalStorage so it works even if school blocks the worker
+    localStorage.setItem('jackson_brain', JSON.stringify(brain));
+
     try {
-        const response = await fetch("https://cloudy-boi.raythefemboy.workers.dev/", {
+        await fetch("https://cloudy-boi.raythefemboy.workers.dev/", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ brain })
         });
-        
-        if (!response.ok) console.error("Sync failed:", response.status);
     } catch (err) {
-        console.error("CORS/Sync error: Check your Cloudflare Worker headers.", err);
+        console.warn("Worker blocked by school filter. Saving to browser memory instead.");
     }
 }
+
+// Load brain from LocalStorage on startup
+window.onload = () => {
+    const saved = localStorage.getItem('jackson_brain');
+    if (saved) brain = JSON.parse(saved);
+};
