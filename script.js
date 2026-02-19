@@ -31,10 +31,10 @@ async function sendMessage() {
     }, 600);
 }
 
-// 2. GENERATOR (Weighted Logic)
+// 2. GENERATOR (Weighted Word-Association)
 function generateResponse(userInput) {
     const wordKeys = Object.keys(brain.words);
-    if (wordKeys.length < 3) return "I am still learning...";
+    if (wordKeys.length === 0) return null;
 
     const inputWords = userInput.toLowerCase().replace(/[^\w\s]/gi, '').split(/\s+/);
     let currentWord = inputWords.find(w => brain.words[w]) || wordKeys[Math.floor(Math.random() * wordKeys.length)];
@@ -45,11 +45,13 @@ function generateResponse(userInput) {
     for (let i = 0; i < limit; i++) {
         const wordData = brain.words[currentWord];
         
+        // Random jump or dead end
         if (!wordData || !wordData.links || wordData.links.length === 0 || Math.random() > 0.85) {
             currentWord = wordKeys[Math.floor(Math.random() * wordKeys.length)];
             continue; 
         }
 
+        // Weighted Selection based on sentiment
         const sortedLinks = [...wordData.links].sort((a, b) => {
             const sentA = brain.words[a]?.sentiment || 0;
             const sentB = brain.words[b]?.sentiment || 0;
@@ -67,7 +69,7 @@ function generateResponse(userInput) {
     return sentence.join(" ");
 }
 
-// 3. LEARNER
+// 3. LEARNER (Mapping word connections)
 function processInput(text, role) {
     const cleanText = text.toLowerCase().replace(/[^\w\s]/gi, '');
     const tokens = cleanText.split(/\s+/).filter(t => t.length > 0);
@@ -132,7 +134,7 @@ async function giveFeedback(index, type) {
     await saveBrain();
 }
 
-// 6. SYNC SAVING (No LocalStorage)
+// 6. SYNC SAVING
 async function saveBrain() {
     try {
         await fetch("https://cloudy-boi.raythefemboy.workers.dev/", {
@@ -141,20 +143,19 @@ async function saveBrain() {
             body: JSON.stringify({ brain })
         });
     } catch (err) {
-        console.warn("Sync blocked by network.");
+        // Silently fail if blocked by school firewall
     }
 }
 
-// 7. LOAD FROM GITHUB (Worker)
+// 7. LOAD FROM GITHUB
 window.onload = async () => {
     try {
-        // We add a random number to the URL to prevent the browser from caching the JSON
         const response = await fetch("https://raw.githubusercontent.com/RayTheFemboy/god-hivemind/main/brain.json?nocache=" + Math.random());
         if (response.ok) {
             brain = await response.json();
-            console.log("Brain synced from GitHub!");
+            console.log("Brain loaded from GitHub.");
         }
     } catch (e) {
-        console.error("Could not load brain from GitHub. Starting fresh.");
+        console.warn("GitHub load failed. Starting with empty brain.");
     }
 };
