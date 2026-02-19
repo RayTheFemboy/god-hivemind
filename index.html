@@ -156,7 +156,13 @@
         <textarea id="userInput" placeholder="Type a message..."></textarea>
         <button id="sendBtn" onclick="sendMessage()">SEND</button>
     </div>
-
+<div class="controls" style="margin-top: 10px;">
+    <button onclick="downloadBrain()">💾 Download Brain</button>
+    <label style="background: #333; color: white; padding: 5px; cursor: pointer;">
+        📂 Upload Brain
+        <input type="file" onchange="uploadBrain(event)" style="display:none;">
+    </label>
+</div>
     <script src="script.js"></script>
 </body>
 </html>
