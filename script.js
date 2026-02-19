@@ -136,26 +136,11 @@ function generateReply(message) {
 // ---------------------------------------
 // SAVE BRAIN (GitHub Action trigger)
 // ---------------------------------------
-async function saveBrain() {
-    const url = `https://api.github.com/repos/${USER}/${REPO}/dispatches`;
-
-    await fetch(url, {
-        method: "POST",
-        headers: {
-            "Accept": "application/vnd.github+json",
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-            event_type: "update-brain",
-            client_payload: {
-                brain: JSON.stringify(brain)
-            }
-        })
-    });
-
-    console.log("Brain update sent to GitHub Action.");
-}// ---------------------------------------
-// Chat UI
+await fetch("https://cloudy-boi.raythefemboy.workers.dev/", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ brain })
+});// Chat UI
 // ---------------------------------------
 function sendMessage() {
     const input = document.getElementById("userInput");
