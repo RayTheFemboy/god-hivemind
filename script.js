@@ -4,10 +4,10 @@ let brain = {
     history: []
 };
 
-// 1. THE SEND FUNCTION
+// 1. THE SEND FUNCTION - This must be at the top level
 async function sendMessage() {
     const inputField = document.getElementById("userInput");
-    const input = inputField.value;
+    const input = inputField ? inputField.value : "";
 
     if (!input || !input.trim()) return;
 
@@ -47,20 +47,17 @@ function generateResponse(userInput) {
     for (let i = 0; i < limit; i++) {
         const wordData = brain.words[currentWord];
         
-        // Random jump (15% chance) or dead end
         if (!wordData || !wordData.links || wordData.links.length === 0 || Math.random() > 0.85) {
             currentWord = wordKeys[Math.floor(Math.random() * wordKeys.length)];
             continue; 
         }
 
-        // Weighted Selection: Favor links with higher sentiment
         const sortedLinks = [...wordData.links].sort((a, b) => {
             const sentA = brain.words[a]?.sentiment || 0;
             const sentB = brain.words[b]?.sentiment || 0;
             return sentB - sentA; 
         });
 
-        // 70% chance to pick the "best" (liked) word, 30% to pick random
         const nextWord = Math.random() > 0.3 ? sortedLinks[0] : sortedLinks[Math.floor(Math.random() * sortedLinks.length)];
         
         if (nextWord !== currentWord) {
@@ -147,7 +144,7 @@ async function saveBrain() {
             body: JSON.stringify({ brain })
         });
     } catch (err) {
-        // Suppress error log for school testing
+        // School firewall catch
     }
 }
 
@@ -176,5 +173,11 @@ function uploadBrain(event) {
 
 window.onload = () => {
     const saved = localStorage.getItem('jackson_brain');
-    if (saved) brain = JSON.parse(saved);
+    if (saved) {
+        try {
+            brain = JSON.parse(saved);
+        } catch (e) {
+            console.error("Local storage brain corrupted, resetting.");
+        }
+    }
 };
