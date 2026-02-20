@@ -4,158 +4,110 @@ let brain = {
     history: []
 };
 
-// 1. THE SEND FUNCTION
+// --- CORE FUNCTIONS ---
+
 async function sendMessage() {
     const inputField = document.getElementById("userInput");
-    const input = inputField ? inputField.value : "";
+    if (!inputField) return;
 
-    if (!input || !input.trim()) return;
+    const input = inputField.value.trim();
+    if (!input) return;
 
     const userMsg = { role: "user", content: input };
     brain.history.push(userMsg);
-    processInput(input, "user");
+    processInput(input);
     renderMessage(userMsg);
     
     inputField.value = ""; 
 
     setTimeout(async () => {
         const aiText = generateResponse(input);
-        
         if (aiText) {
             const aiMsg = { role: "assistant", content: aiText, feedback: null };
             brain.history.push(aiMsg);
-            processInput(aiText, "assistant");
+            processInput(aiText);
             renderMessage(aiMsg);
         }
         await saveBrain();
     }, 600);
 }
 
-// 2. GENERATOR (Weighted Word-Association)
 function generateResponse(userInput) {
     const wordKeys = Object.keys(brain.words);
-    if (wordKeys.length === 0) return null;
+    if (wordKeys.length < 2) return null;
 
     const inputWords = userInput.toLowerCase().replace(/[^\w\s]/gi, '').split(/\s+/);
     let currentWord = inputWords.find(w => brain.words[w]) || wordKeys[Math.floor(Math.random() * wordKeys.length)];
     
     let sentence = [currentWord];
-    let limit = 12; 
-
-    for (let i = 0; i < limit; i++) {
+    for (let i = 0; i < 10; i++) {
         const wordData = brain.words[currentWord];
-        
-        // Random jump or dead end
-        if (!wordData || !wordData.links || wordData.links.length === 0 || Math.random() > 0.85) {
-            currentWord = wordKeys[Math.floor(Math.random() * wordKeys.length)];
-            continue; 
-        }
+        if (!wordData || !wordData.links || wordData.links.length === 0) break;
 
-        // Weighted Selection based on sentiment
-        const sortedLinks = [...wordData.links].sort((a, b) => {
-            const sentA = brain.words[a]?.sentiment || 0;
-            const sentB = brain.words[b]?.sentiment || 0;
-            return sentB - sentA; 
-        });
-
-        const nextWord = Math.random() > 0.3 ? sortedLinks[0] : sortedLinks[Math.floor(Math.random() * sortedLinks.length)];
+        // Weighting logic: Favors words you've liked (+)
+        const links = wordData.links.sort((a, b) => (brain.words[b]?.sentiment || 0) - (brain.words[a]?.sentiment || 0));
+        const nextWord = Math.random() > 0.3 ? links[0] : links[Math.floor(Math.random() * links.length)];
         
-        if (nextWord !== currentWord) {
-            sentence.push(nextWord);
-            currentWord = nextWord;
-        }
-        if (i > 5 && Math.random() > 0.6) break;
+        sentence.push(nextWord);
+        currentWord = nextWord;
+        if (i > 4 && Math.random() > 0.7) break;
     }
     return sentence.join(" ");
 }
 
-// 3. LEARNER (Mapping word connections)
-function processInput(text, role) {
-    const cleanText = text.toLowerCase().replace(/[^\w\s]/gi, '');
-    const tokens = cleanText.split(/\s+/).filter(t => t.length > 0);
-
+function processInput(text) {
+    const tokens = text.toLowerCase().replace(/[^\w\s]/gi, '').split(/\s+/).filter(t => t.length > 0);
     for (let i = 0; i < tokens.length; i++) {
         const word = tokens[i];
-        const nextWord = tokens[i + 1];
-
-        if (!brain.words[word]) {
-            brain.words[word] = { seen: 1, links: [], sentiment: 0 };
-        } else {
-            brain.words[word].seen += 1;
-        }
-
-        if (nextWord && !brain.words[word].links.includes(nextWord)) {
-            brain.words[word].links.push(nextWord);
-        }
+        const next = tokens[i+1];
+        if (!brain.words[word]) brain.words[word] = { seen: 1, links: [], sentiment: 0 };
+        else brain.words[word].seen++;
+        if (next && !brain.words[word].links.includes(next)) brain.words[word].links.push(next);
     }
 }
 
-// 4. UI RENDERING
+// --- UI & SYNC ---
+
 function renderMessage(msg) {
     const chatBox = document.getElementById("chatBox");
-    if (!chatBox) return;
-
     const index = brain.history.length - 1;
     const isAi = msg.role === "assistant";
+    const buttons = isAi ? `<div class="feedback-btns"><button onclick="giveFeedback(${index}, 'like')">(+)</button><button onclick="giveFeedback(${index}, 'dislike')">(-)</button></div>` : "";
     
-    const buttons = isAi ? `
-        <div class="feedback-btns">
-            <button onclick="giveFeedback(${index}, 'like')">(+)</button>
-            <button onclick="giveFeedback(${index}, 'dislike')">(-)</button>
-        </div>` : "";
-
-    const html = `
-        <div id="msg-${index}" class="message ${msg.role}">
-            <div class="msg-content">${msg.content}</div>
-            ${buttons}
-        </div>
-    `;
-    
-    chatBox.innerHTML += html;
+    chatBox.innerHTML += `<div id="msg-${index}" class="message ${msg.role}"><div class="msg-content">${msg.content}</div>${buttons}</div>`;
     chatBox.scrollTop = chatBox.scrollHeight;
 }
 
-// 5. FEEDBACK
 async function giveFeedback(index, type) {
     const msg = brain.history[index];
-    const element = document.getElementById(`msg-${index}`);
-    if (!msg || !element) return;
-
+    const el = document.getElementById(`msg-${index}`);
+    if (!msg || !el) return;
+    
     msg.feedback = type;
-    element.style.backgroundColor = type === 'like' ? "#1b5e20" : "#b71c1c";
-    element.style.borderColor = type === 'like' ? "#00e676" : "#ff5252";
-
-    const tokens = msg.content.toLowerCase().split(/\s+/);
-    tokens.forEach(word => {
-        if (brain.words[word]) {
-            brain.words[word].sentiment += (type === 'like' ? 2 : -2);
-        }
-    });
+    el.style.backgroundColor = type === 'like' ? "#1b5e20" : "#b71c1c";
+    
+    const words = msg.content.toLowerCase().split(/\s+/);
+    words.forEach(w => { if(brain.words[w]) brain.words[w].sentiment += (type === 'like' ? 2 : -2); });
     await saveBrain();
 }
 
-// 6. SYNC SAVING
 async function saveBrain() {
     try {
         await fetch("https://cloudy-boi.raythefemboy.workers.dev/", {
             method: "POST",
+            mode: "cors", // Forces the handshake
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ brain })
         });
-    } catch (err) {
-        // Silently fail if blocked by school firewall
-    }
+    } catch (e) { console.warn("Sync failed"); }
 }
 
-// 7. LOAD FROM GITHUB
 window.onload = async () => {
     try {
-        const response = await fetch("https://raw.githubusercontent.com/RayTheFemboy/god-hivemind/main/brain.json?nocache=" + Math.random());
-        if (response.ok) {
-            brain = await response.json();
-            console.log("Brain loaded from GitHub.");
+        const res = await fetch("https://raw.githubusercontent.com/RayTheFemboy/god-hivemind/main/brain.json?v=" + Date.now());
+        if (res.ok) {
+            brain = await res.json();
+            console.log("Brain loaded!");
         }
-    } catch (e) {
-        console.warn("GitHub load failed. Starting with empty brain.");
-    }
+    } catch (e) { console.warn("Fresh start"); }
 };
