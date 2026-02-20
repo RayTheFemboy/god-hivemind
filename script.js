@@ -101,13 +101,14 @@ async function saveBrain() {
         });
     } catch (e) { console.warn("Sync failed"); }
 }
-
 window.onload = async () => {
     try {
-        const res = await fetch("https://raw.githubusercontent.com/RayTheFemboy/god-hivemind/main/brain.json?v=" + Date.now());
-        if (res.ok) {
-            brain = await res.json();
-            console.log("Brain loaded!");
+        const response = await fetch("https://raw.githubusercontent.com/RayTheFemboy/god-hivemind/main/brain.json?nocache=" + Math.random());
+        if (response.ok) {
+            brain = await response.json();
+            console.log("Brain loaded from GitHub.");
         }
-    } catch (e) { console.warn("Fresh start"); }
+    } catch (e) {
+        console.warn("GitHub load failed. Starting fresh.");
+    }
 };
